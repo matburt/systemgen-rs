@@ -1,13 +1,15 @@
-//! `systemgen [SEED] [--class G | --mass 1.0] [--realistic] [--megastructure] [--json]`: prints one system.
+//! `systemgen [SEED] [--class G | --mass 1.0] [--realistic] [--megastructure] [--star-only] [--json]`:
+//! prints one system, or with `--star-only` just its star.
 
 use std::process::ExitCode;
 
 use systemgen::{
-    generate, Body, BodyKind, Config, Host, SpectralClass, StarChoice, StarSystem, StarWeights,
+    generate, generate_star, Body, BodyKind, Config, Host, SpectralClass, Star, StarChoice,
+    StarSystem, StarWeights,
 };
 
 const USAGE: &str =
-    "usage: systemgen [SEED] [--class O|B|A|F|G|K|M | --mass SOLAR_MASSES] [--realistic] [--megastructure] [--json]";
+    "usage: systemgen [SEED] [--class O|B|A|F|G|K|M | --mass SOLAR_MASSES] [--realistic] [--megastructure] [--star-only] [--json]";
 
 fn main() -> ExitCode {
     match run(std::env::args().skip(1).collect()) {
@@ -23,10 +25,12 @@ fn run(args: Vec<String>) -> Result<(), String> {
     let mut seed = 1_u64;
     let mut config = Config::default();
     let mut json = false;
+    let mut star_only = false;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--json" => json = true,
+            "--star-only" => star_only = true,
             "--megastructure" => config.megastructures.chance = 1.0,
             "--realistic" => config.star = StarChoice::Weighted(StarWeights::REALISTIC),
             "--class" => {
@@ -45,13 +49,27 @@ fn run(args: Vec<String>) -> Result<(), String> {
         }
     }
 
+    if star_only {
+        let star = generate_star(seed, &config);
+        if json {
+            print_json(&star)?;
+        } else {
+            print_star(seed, &star);
+        }
+        return Ok(());
+    }
     let system = generate(seed, &config);
     if json {
-        let out = serde_json::to_string_pretty(&system).map_err(|e| e.to_string())?;
-        println!("{out}");
+        print_json(&system)?;
     } else {
         print_system(&system);
     }
+    Ok(())
+}
+
+fn print_json(value: &impl serde::Serialize) -> Result<(), String> {
+    let out = serde_json::to_string_pretty(value).map_err(|e| e.to_string())?;
+    println!("{out}");
     Ok(())
 }
 
@@ -73,12 +91,15 @@ fn parse_class(s: &str) -> Result<SpectralClass, String> {
     })
 }
 
-fn print_system(system: &StarSystem) {
-    let s = &system.star;
+fn print_star(seed: u64, s: &Star) {
     println!(
-        "Seed {}: {:?} star, {:.2} M☉, {:.3} L☉, {:.0} K, habitable zone {:.2}–{:.2} AU, frost line {:.2} AU",
-        system.seed, s.class, s.mass, s.luminosity, s.temperature_k, s.habitable_zone_au.0, s.habitable_zone_au.1, s.frost_line_au
+        "Seed {seed}: {:?} star, {:.2} M☉, {:.3} L☉, {:.0} K, habitable zone {:.2}–{:.2} AU, frost line {:.2} AU",
+        s.class, s.mass, s.luminosity, s.temperature_k, s.habitable_zone_au.0, s.habitable_zone_au.1, s.frost_line_au
     );
+}
+
+fn print_system(system: &StarSystem) {
+    print_star(system.seed, &system.star);
     println!(
         "{:>3}  {:>8}  {:<9}  {:<8}  {:>9}  {:>8}  {:>5}  {:>6}  {:>8}  {:<10}  tags",
         "", "orbit", "zone", "kind", "mass (E)", "radius", "g", "temp K", "bar", "profile"

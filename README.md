@@ -22,7 +22,24 @@ println!("{:?} star, {} bodies", system.star.class, system.bodies.len());
 // A G star, driven by your own RNG (implement `systemgen::Rng::next_u64`).
 let config = Config { star: StarChoice::Class(SpectralClass::G), ..Config::default() };
 let system = systemgen::generate_with(&mut my_rng, &config);
+
+// Just the star, as `generate(42, &config).star` gives it, without the planets. Cheap enough
+// for a map of thousands of systems. Only `apparent_luminosity` differs: megastructures dim
+// it, and this skips them, so it equals `luminosity`.
+let star = systemgen::generate_star(42, &config);
+
+// Reroll seed 42 (up to 64 tries) until a score reaches 0.3; otherwise keep the best try.
+// `sub_seed` regenerates the same system with `generate`. Try 0 is seed 42 itself.
+let best_habitable_zone_world = |s: &systemgen::StarSystem| {
+    s.all_bodies()
+        .filter(|(_, b)| b.kind.is_solid() && b.orbit.zone == systemgen::Zone::Habitable)
+        .map(|(_, b)| b.world.habitability)
+        .fold(0.0, f64::max)
+};
+let (system, sub_seed) = systemgen::generate_where(42, &config, 64, best_habitable_zone_world, 0.3);
 ```
+
+Habitable-zone worlds that good are scarce: about 8.5% of G systems and 1.7% of K systems have one, so 64 tries find one for nearly every G seed but only about 60% of K seeds; K needs about 256.
 
 Enable the `serde` feature to serialize systems.
 
@@ -34,7 +51,7 @@ Seed 7: G star, 1.06 M☉, 1.225 L☉, 5738 K, habitable zone 0.93–1.84 AU, fr
   ...
 ```
 
-The CLI takes `[SEED] [--class G | --mass 1.0] [--realistic] [--megastructure] [--json]`; `--megastructure` forces one. `make survey` prints statistics over 2,000 seeds, which is useful when tuning.
+The CLI takes `[SEED] [--class G | --mass 1.0] [--realistic] [--megastructure] [--star-only] [--json]`; `--megastructure` forces one and `--star-only` prints just the star line. `make survey` prints statistics over 2,000 seeds, which is useful when tuning.
 
 ## Units
 
