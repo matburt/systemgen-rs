@@ -1,13 +1,13 @@
-//! `systemgen [SEED] [--class G | --mass 1.0] [--realistic] [--json]`: prints one system.
+//! `systemgen [SEED] [--class G | --mass 1.0] [--realistic] [--megastructure] [--json]`: prints one system.
 
 use std::process::ExitCode;
 
 use systemgen::{
-    generate, Body, BodyKind, Config, SpectralClass, StarChoice, StarSystem, StarWeights,
+    generate, Body, BodyKind, Config, Host, SpectralClass, StarChoice, StarSystem, StarWeights,
 };
 
 const USAGE: &str =
-    "usage: systemgen [SEED] [--class O|B|A|F|G|K|M | --mass SOLAR_MASSES] [--realistic] [--json]";
+    "usage: systemgen [SEED] [--class O|B|A|F|G|K|M | --mass SOLAR_MASSES] [--realistic] [--megastructure] [--json]";
 
 fn main() -> ExitCode {
     match run(std::env::args().skip(1).collect()) {
@@ -27,6 +27,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--json" => json = true,
+            "--megastructure" => config.megastructures.chance = 1.0,
             "--realistic" => config.star = StarChoice::Weighted(StarWeights::REALISTIC),
             "--class" => {
                 config.star = StarChoice::Class(parse_class(&value(&mut args, "--class")?)?)
@@ -101,6 +102,27 @@ fn print_system(system: &StarSystem) {
                 "km",
             );
         }
+    }
+    for m in &system.megastructures {
+        let at = match m.host {
+            Host::Star => format!("{:.2} AU round the star", m.radius),
+            Host::Body(r) => format!("{:.0} km round body {}", m.radius, r.body + 1),
+        };
+        let era = m.era.map_or(String::new(), |e| format!(", {e:?}"));
+        println!(
+            "  megastructure: {:?} ({:?}{era}), {at}, catches {:.0}% of starlight, {:.3} Earths of living space, {} bodies consumed",
+            m.kind,
+            m.condition,
+            m.coverage * 100.0,
+            m.habitable_area_earths,
+            m.consumed_bodies
+        );
+    }
+    if system.star.apparent_luminosity < system.star.luminosity {
+        println!(
+            "  seen from outside: {:.3} L☉ of {:.3}",
+            system.star.apparent_luminosity, system.star.luminosity
+        );
     }
 }
 
