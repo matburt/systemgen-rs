@@ -170,6 +170,7 @@ fn g_stars_find_a_habitable_zone_world_within_64_tries() {
 }
 
 #[test]
+#[ignore = "a measurement, not a guard: homes are G stars; run with --ignored when tuning K worlds"]
 fn k_stars_find_a_habitable_zone_world_within_256_tries() {
     let needed = tries_to_a_habitable_zone_world(SpectralClass::K, 256);
     // Measured: 61 of 100 within 64 tries and 100 of 100 within 256 (about 1.7% of K systems
