@@ -1,0 +1,5 @@
+#!/bin/sh
+# Refuse a commit that cargo fmt or clippy would reject.
+set -e
+cargo fmt --all --check
+cargo clippy --all-targets --all-features -q -- -D warnings

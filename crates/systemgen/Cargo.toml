@@ -1,0 +1,14 @@
+[package]
+name = "systemgen"
+description = "Plausible star systems from a seed: accretion physics, then Traveller-shaped world profiles."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["procedural", "generation", "accrete", "planetary", "gamedev"]
+
+[features]
+serde = ["dep:serde"]
+
+[dependencies]
+serde = { workspace = true, optional = true }

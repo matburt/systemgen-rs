@@ -1,0 +1,16 @@
+[package]
+name = "systemgen-cli"
+description = "Print a generated star system."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "systemgen"
+path = "src/main.rs"
+
+[dependencies]
+systemgen = { workspace = true, features = ["serde"] }
+serde_json.workspace = true
