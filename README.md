@@ -2,12 +2,11 @@
 
 Plausible star systems from a seed, for games. A Rust library (`systemgen`) and a small CLI.
 
-Generation runs in three layers:
+Generation runs in four layers:
 
 1. **Star.** A spectral class is picked from weights, then a mass within it. Luminosity, temperature, habitable zone and frost line follow from the mass.
 2. **Accretion.** Dole's 1969 dust-cloud model, as refined by Sagan and Isaacson, forms the planets, gas giants, moons and rings. The Starform/StarGen environment pass then gives each body its gravity, pressure, temperature, water, ice and clouds. A belt is added at the first outer gas giant's 2:1 resonance.
 3. **World profile.** Each body gets a Traveller-shaped profile: starport, size, atmosphere, hydrographics, population, government, law, tech level and trade tags, plus ruins. The physical codes come from layer 2. Settlement is sparse: at most one settled mainworld per system, a few outposts round it, and ruins on worlds that could once have held life.
-
 4. **Megastructures.** About one system in twenty-five has one: a Dyson swarm or sphere, a Matrioshka brain, a ringworld, a Bishop ring, an orbital ring or a Shkadov thruster. Each is sized from its star or host. Builders strip the solid planets a shell or ringworld needed, and shells dim the star as seen from outside. Most are derelict, ruined or unfinished; one still works only if the system has a settled high-tech mainworld.
 
 Everything is deterministic: the same seed and `Config` always give the same system on a given build and platform. Each layer draws from its own stream, so a game can feed in its own seeded RNG.
