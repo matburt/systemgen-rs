@@ -12,6 +12,7 @@ fn main() {
     let (mut bodies, mut moons, mut giants, mut inner_giants, mut belts) = (0, 0, 0, 0, 0);
     let (mut settled, mut outposts, mut gardens, mut ruins, mut habitable) = (0, 0, 0, 0, 0);
     let mut classes = std::collections::BTreeMap::new();
+    let mut megas = std::collections::BTreeMap::new();
 
     let start = std::time::Instant::now();
     for seed in 0..n {
@@ -19,6 +20,11 @@ fn main() {
         *classes
             .entry(format!("{:?}", system.star.class))
             .or_insert(0) += 1;
+        for m in &system.megastructures {
+            *megas
+                .entry(format!("{:?}/{:?}", m.kind, m.condition))
+                .or_insert(0) += 1;
+        }
         for b in &system.bodies {
             bodies += 1;
             moons += b.moons.len();
@@ -75,4 +81,5 @@ fn main() {
         per(gardens),
         per(ruins)
     );
+    println!("megastructures: {megas:?}");
 }

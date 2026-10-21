@@ -3,6 +3,7 @@
 
 use crate::accrete::consts::{INCREDIBLY_LARGE_NUMBER, KM_PER_AU};
 use crate::accrete::{Planetesimal, System};
+use crate::megastructure::Megastructure;
 use crate::star::Star;
 use crate::world::WorldProfile;
 
@@ -26,6 +27,7 @@ pub struct StarSystem {
     pub bodies: Vec<Body>,
     /// The system's most significant world, if anywhere is settled or worth settling.
     pub mainworld: Option<BodyRef>,
+    pub megastructures: Vec<Megastructure>,
 }
 
 impl StarSystem {

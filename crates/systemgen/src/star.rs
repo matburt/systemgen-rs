@@ -89,6 +89,8 @@ pub struct Star {
     pub mass: f64,
     /// Solar luminosities.
     pub luminosity: f64,
+    /// What's left after Dyson swarms and shells, as seen from outside them.
+    pub apparent_luminosity: f64,
     pub temperature_k: f64,
     pub radius_au: f64,
     /// Linear RGB, 0–1.
@@ -105,6 +107,7 @@ impl Star {
             class: p.spectral_class,
             mass: p.stellar_mass,
             luminosity: p.stellar_luminosity,
+            apparent_luminosity: p.stellar_luminosity,
             temperature_k: p.stellar_surface_temp,
             radius_au: p.stellar_radius_au,
             color: p.color,
