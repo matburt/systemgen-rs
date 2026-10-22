@@ -28,7 +28,10 @@ pub mod world;
 
 pub use accrete::Disk;
 pub use megastructure::{Condition, Host, MegaKind, Megastructure, Megastructures};
-pub use model::{Body, BodyKind, BodyRef, Orbit, RingBand, StarSystem, Surface, Zone};
+pub use model::{
+    Body, BodyKind, BodyRef, Orbit, RingBand, StarSystem, Surface, Zone, BELT_MAX_EARTH_MASSES,
+    DWARF_MAX_RADIUS_KM,
+};
 pub use rng::{Rng, SplitMix64};
 pub use star::{SpectralClass, Star, StarChoice, StarWeights};
 pub use world::{Atmosphere, Era, Government, Remnant, Settlement, Starport, Tag, WorldProfile};

@@ -1,5 +1,9 @@
 //! The public description of a generated system, and how the accrete layer's planetesimals
 //! become it: units a game can use, zones relative to the star, belts, and moons in km.
+//!
+//! A top-level body that has not cleared its orbit is a belt if it's lighter than
+//! [`BELT_MAX_EARTH_MASSES`], a dwarf if it's smaller than [`DWARF_MAX_RADIUS_KM`], and
+//! otherwise `Icy` past the frost line or `Rocky` inside it, like any other solid body.
 
 use crate::accrete::consts::{INCREDIBLY_LARGE_NUMBER, KM_PER_AU};
 use crate::accrete::{Planetesimal, System};
@@ -7,8 +11,12 @@ use crate::megastructure::Megastructure;
 use crate::star::Star;
 use crate::world::WorldProfile;
 
-/// Below this many Earth masses a body that has not cleared its orbit is a belt.
-const BELT_MAX_EARTH_MASSES: f64 = 0.01;
+/// Below this many Earth masses a body that has not cleared its orbit is a belt: between
+/// Ceres (0.00016) and Pluto (0.0022).
+pub const BELT_MAX_EARTH_MASSES: f64 = 0.001;
+/// A body that has not cleared its orbit is a dwarf only below this radius (Pluto is 1,188
+/// km, Mercury 2,440). A larger one reads as a planet and is `Icy` or `Rocky` by zone.
+pub const DWARF_MAX_RADIUS_KM: f64 = 1500.0;
 /// Gas giants clear a belt at their inner 2:1 resonance, (1/2)^(2/3) of their orbit.
 const RESONANCE_2_1: f64 = 0.63;
 /// A resonance belt needs this much room past the nearest inner body.
@@ -110,7 +118,7 @@ pub enum BodyKind {
     Rocky,
     /// A solid body formed past the frost line.
     Icy,
-    /// Has not cleared its orbit.
+    /// Has not cleared its orbit and is smaller than [`DWARF_MAX_RADIUS_KM`].
     Dwarf,
     Belt,
 }
@@ -200,7 +208,7 @@ fn body(p: &Planetesimal, star: &Star, parent: Option<&Planetesimal>) -> Body {
         BodyKind::IceGiant
     } else if parent.is_none() && p.is_dwarf_planet && p.earth_masses < BELT_MAX_EARTH_MASSES {
         BodyKind::Belt
-    } else if parent.is_none() && p.is_dwarf_planet {
+    } else if parent.is_none() && p.is_dwarf_planet && p.radius < DWARF_MAX_RADIUS_KM {
         BodyKind::Dwarf
     } else if zone == Zone::Outer {
         BodyKind::Icy
