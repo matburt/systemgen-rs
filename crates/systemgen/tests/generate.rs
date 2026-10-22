@@ -1,5 +1,6 @@
 use systemgen::{
     generate, generate_with, Body, BodyKind, Config, Settlement, SplitMix64, StarChoice,
+    DWARF_MAX_RADIUS_KM,
 };
 
 const SEEDS: std::ops::Range<u64> = 0..200;
@@ -151,4 +152,22 @@ fn sunlike_stars_usually_have_a_gas_giant_past_the_frost_line() {
         })
         .count();
     assert!(with_giant >= 40, "{with_giant}/50");
+}
+
+#[test]
+fn dwarfs_appear_and_none_is_as_large_as_the_dwarf_bound() {
+    let config = Config::default();
+    let mut dwarfs = 0;
+    for seed in 0..1000 {
+        let system = generate(seed, &config);
+        for (_, b) in system.all_bodies() {
+            dwarfs += usize::from(b.kind == BodyKind::Dwarf);
+            assert!(
+                b.kind != BodyKind::Dwarf || b.radius_km < DWARF_MAX_RADIUS_KM,
+                "seed {seed}: a {:.0} km dwarf",
+                b.radius_km
+            );
+        }
+    }
+    assert!(dwarfs > 0, "no dwarfs over the seeds");
 }

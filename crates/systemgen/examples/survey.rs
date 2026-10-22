@@ -13,6 +13,7 @@ fn main() {
     let (mut settled, mut outposts, mut gardens, mut ruins, mut habitable) = (0, 0, 0, 0, 0);
     let mut classes = std::collections::BTreeMap::new();
     let mut megas = std::collections::BTreeMap::new();
+    let mut kinds = std::collections::BTreeMap::new();
 
     let start = std::time::Instant::now();
     for seed in 0..n {
@@ -27,6 +28,7 @@ fn main() {
         }
         for b in &system.bodies {
             bodies += 1;
+            *kinds.entry(format!("{:?}", b.kind)).or_insert(0) += 1;
             moons += b.moons.len();
             if b.kind.is_gaseous() {
                 giants += 1;
@@ -73,6 +75,7 @@ fn main() {
         per(inner_giants),
         per(belts)
     );
+    println!("body kinds: {kinds:?}");
     println!(
         "settled mainworlds {:.1}%, outposts {:.2}/system, habitability > 0.5 {:.2}/system, gardens {:.3}/system, ruins {:.2}/system",
         100.0 * per(settled),
