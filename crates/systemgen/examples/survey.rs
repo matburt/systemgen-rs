@@ -14,6 +14,7 @@ fn main() {
     let mut classes = std::collections::BTreeMap::new();
     let mut megas = std::collections::BTreeMap::new();
     let mut kinds = std::collections::BTreeMap::new();
+    let (mut with_megas, mut dimmed) = (0, 0);
 
     let start = std::time::Instant::now();
     for seed in 0..n {
@@ -21,6 +22,8 @@ fn main() {
         *classes
             .entry(format!("{:?}", system.star.class))
             .or_insert(0) += 1;
+        with_megas += usize::from(!system.megastructures.is_empty());
+        dimmed += usize::from(system.star.apparent_luminosity < system.star.luminosity);
         for m in &system.megastructures {
             *megas
                 .entry(format!("{:?}/{:?}", m.kind, m.condition))
@@ -83,6 +86,11 @@ fn main() {
         per(habitable),
         per(gardens),
         per(ruins)
+    );
+    println!(
+        "systems with megastructures {:.2}%, with a dimmed star {:.2}%",
+        100.0 * per(with_megas),
+        100.0 * per(dimmed)
     );
     println!("megastructures: {megas:?}");
 }
