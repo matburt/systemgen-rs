@@ -55,6 +55,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
             print_json(&star)?;
         } else {
             print_star(seed, &star);
+            print_dimming(&star);
         }
         return Ok(());
     }
@@ -98,6 +99,15 @@ fn print_star(seed: u64, s: &Star) {
     );
 }
 
+fn print_dimming(s: &Star) {
+    if s.apparent_luminosity < s.luminosity {
+        println!(
+            "  seen from outside: {:.3} L☉ of {:.3}",
+            s.apparent_luminosity, s.luminosity
+        );
+    }
+}
+
 fn print_system(system: &StarSystem) {
     print_star(system.seed, &system.star);
     println!(
@@ -139,12 +149,7 @@ fn print_system(system: &StarSystem) {
             m.consumed_bodies
         );
     }
-    if system.star.apparent_luminosity < system.star.luminosity {
-        println!(
-            "  seen from outside: {:.3} L☉ of {:.3}",
-            system.star.apparent_luminosity, system.star.luminosity
-        );
-    }
+    print_dimming(&system.star);
 }
 
 fn letter(i: usize) -> char {

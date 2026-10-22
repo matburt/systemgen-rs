@@ -7,7 +7,9 @@ Generation runs in four layers:
 1. **Star.** A spectral class is picked from weights, then a mass within it. Luminosity, temperature, habitable zone and frost line follow from the mass.
 2. **Accretion.** Dole's 1969 dust-cloud model, as refined by Sagan and Isaacson, forms the planets, gas giants, moons and rings. The Starform/StarGen environment pass then gives each body its gravity, pressure, temperature, water, ice and clouds. A belt is added at the first outer gas giant's 2:1 resonance. A body that hasn't cleared its orbit is a belt if under 0.001 Earth masses (between Ceres and Pluto) and a dwarf if under 1,500 km in radius; anything larger is icy or rocky by zone.
 3. **World profile.** Each body gets a Traveller-shaped profile: starport, size, atmosphere, hydrographics, population, government, law, tech level and trade tags, plus ruins. The physical codes come from layer 2. Settlement is sparse: at most one settled mainworld per system, a few outposts round it, and ruins on worlds that could once have held life.
-4. **Megastructures.** About one system in twenty-five has one: a Dyson swarm or sphere, a Matrioshka brain, a ringworld, a Bishop ring, an orbital ring or a Shkadov thruster. Each is sized from its star or host. Builders strip the solid planets a shell or ringworld needed, and shells dim the star as seen from outside. Most are derelict, ruined or unfinished; one still works only if the system has a settled high-tech mainworld.
+4. **Megastructures.** About one system in twenty-five has one: a Dyson swarm or sphere, a Matrioshka brain, a ringworld, a Bishop ring, an orbital ring or a Shkadov thruster. Each is sized from its star or host. Builders strip the solid planets a shell or ringworld needed, and shells dim the star as seen from outside. Most are derelict, ruined or unfinished; one still works only if the system has a settled high-tech mainworld. Each structure's kind, size, condition and coverage are drawn from the star alone, so a star's dimming is known without its planets. Whether an intact structure still works is decided after settlement, and a working one blocks the same light as a derelict one. `Megastructures::kind` and `::condition` force the first structure's kind and condition, for tools.
+
+Since 0.4.0 megastructures are drawn in that star-only order. Every system with a megastructure differs from 0.3; systems without one are unchanged.
 
 Everything is deterministic: the same seed and `Config` always give the same system on a given build and platform. Each layer draws from its own stream, so a game can feed in its own seeded RNG.
 
@@ -23,20 +25,20 @@ println!("{:?} star, {} bodies", system.star.class, system.bodies.len());
 let config = Config { star: StarChoice::Class(SpectralClass::G), ..Config::default() };
 let system = systemgen::generate_with(&mut my_rng, &config);
 
-// Just the star, as `generate(42, &config).star` gives it, without the planets. Cheap enough
-// for a map of thousands of systems. Only `apparent_luminosity` differs: megastructures dim
-// it, and this skips them, so it equals `luminosity`.
+// Just the star, exactly as `generate(42, &config).star` gives it (dimmed by any shell),
+// without the planets. Cheap enough for a map of thousands of systems.
 let star = systemgen::generate_star(42, &config);
 
 // Reroll seed 42 (up to 64 tries) until a score reaches 0.3; otherwise keep the best try.
-// `sub_seed` regenerates the same system with `generate`. Try 0 is seed 42 itself.
+// `found.sub_seed` regenerates the same system with `generate`; `found.attempt` says which
+// try won (0 is seed 42 itself) and `found.score` what it scored.
 let best_habitable_zone_world = |s: &systemgen::StarSystem| {
     s.all_bodies()
         .filter(|(_, b)| b.kind.is_solid() && b.orbit.zone == systemgen::Zone::Habitable)
         .map(|(_, b)| b.world.habitability)
         .fold(0.0, f64::max)
 };
-let (system, sub_seed) = systemgen::generate_where(42, &config, 64, best_habitable_zone_world, 0.3);
+let found = systemgen::generate_where(42, &config, 64, best_habitable_zone_world, 0.3);
 ```
 
 Habitable-zone worlds that good are scarce: about 8.5% of G systems and 1.7% of K systems have one, so 64 tries find one for nearly every G seed but only about 60% of K seeds; K needs about 256.

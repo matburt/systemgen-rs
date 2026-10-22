@@ -18,12 +18,12 @@ fn star_choices() -> [StarChoice; 6] {
 }
 
 #[test]
-fn generate_star_is_the_full_generations_star_but_undimmed() {
+fn generate_star_is_the_full_generations_star_dimming_included() {
     for choice in star_choices() {
-        // Forced megastructures dim the full generation's star, so they test the exception.
+        // Forced megastructures dim most stars and strip or ring their planets.
         for (megastructures, seeds) in [
             (Megastructures::default(), 300),
-            (forced_megastructures(), 50),
+            (forced_megastructures(), 300),
         ] {
             let config = Config {
                 star: choice,
@@ -31,24 +31,42 @@ fn generate_star_is_the_full_generations_star_but_undimmed() {
                 ..Config::default()
             };
             for seed in 0..seeds {
-                let mut full = generate(seed, &config).star;
-                let alone = generate_star(seed, &config);
-                assert_eq!(alone.apparent_luminosity, alone.luminosity);
-                full.apparent_luminosity = full.luminosity;
-                assert_eq!(alone, full, "seed {seed}, {choice:?}");
+                let full = generate(seed, &config).star;
+                assert_eq!(
+                    generate_star(seed, &config),
+                    full,
+                    "seed {seed}, {choice:?}"
+                );
             }
         }
     }
 }
 
 #[test]
+fn some_forced_megastructures_dim_the_star_alone() {
+    let config = Config {
+        megastructures: forced_megastructures(),
+        ..Config::default()
+    };
+    let dimmed = (0..100)
+        .filter(|&seed| {
+            let star = generate_star(seed, &config);
+            star.apparent_luminosity < star.luminosity
+        })
+        .count();
+    assert!(dimmed > 0);
+}
+
+#[test]
 fn generate_star_with_draws_like_generate_with() {
-    let config = Config::default();
+    let config = Config {
+        megastructures: forced_megastructures(),
+        ..Config::default()
+    };
     for seed in 0..50 {
         let (mut a, mut b) = (SplitMix64::new(seed), SplitMix64::new(seed));
-        let mut full = generate_with(&mut a, &config).star;
+        let full = generate_with(&mut a, &config).star;
         let alone = generate_star_with(&mut b, &config);
-        full.apparent_luminosity = full.luminosity;
         assert_eq!(alone, full, "seed {seed}");
         assert_eq!(
             systemgen::Rng::next_u64(&mut a),
@@ -87,9 +105,13 @@ fn generate_where_is_deterministic() {
 fn generate_where_returns_a_system_its_seed_regenerates() {
     let config = Config::default();
     for seed in 0..20 {
-        let (system, sub_seed) = generate_where(seed, &config, 16, habitable_zone_score, 0.3);
-        assert_eq!(system.seed, sub_seed);
-        assert_eq!(system, generate(sub_seed, &config), "seed {seed}");
+        let found = generate_where(seed, &config, 16, habitable_zone_score, 0.3);
+        assert_eq!(found.system.seed, found.sub_seed);
+        assert_eq!(
+            found.system,
+            generate(found.sub_seed, &config),
+            "seed {seed}"
+        );
     }
 }
 
@@ -97,9 +119,9 @@ fn generate_where_returns_a_system_its_seed_regenerates() {
 fn generate_where_tries_the_seed_itself_first() {
     let config = Config::default();
     for seed in 0..20 {
-        let (system, sub_seed) = generate_where(seed, &config, 8, |_| 1.0, 0.0);
-        assert_eq!(sub_seed, seed);
-        assert_eq!(system, generate(seed, &config));
+        let found = generate_where(seed, &config, 8, |_| 1.0, 0.0);
+        assert_eq!((found.sub_seed, found.attempt), (seed, 0));
+        assert_eq!(found.system, generate(seed, &config));
     }
 }
 
@@ -113,11 +135,30 @@ fn generate_where_keeps_the_best_try_when_none_is_good_enough() {
             scores.borrow_mut().push(score);
             score
         };
-        let (best, _) = generate_where(seed, &config, 8, recorded, f64::INFINITY);
+        let best = generate_where(seed, &config, 8, recorded, f64::INFINITY);
         let scores = scores.into_inner();
         assert_eq!(scores.len(), 8);
         let top = scores.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-        assert_eq!(habitable_zone_score(&best), top, "seed {seed}");
+        assert_eq!(best.score, top, "seed {seed}");
+        assert_eq!(habitable_zone_score(&best.system), top, "seed {seed}");
+        let first_top = scores.iter().position(|&s| s == top).unwrap();
+        assert_eq!(best.attempt as usize, first_top, "seed {seed}");
+    }
+}
+
+#[test]
+fn generate_where_reports_the_try_that_reached_good_enough() {
+    let config = Config::default();
+    for seed in 0..20 {
+        let used = Cell::new(0);
+        let counted = |system: &StarSystem| {
+            used.set(used.get() + 1);
+            habitable_zone_score(system)
+        };
+        let found = generate_where(seed, &config, 64, counted, 0.3);
+        if found.score >= 0.3 {
+            assert_eq!(found.attempt + 1, used.get(), "seed {seed}");
+        }
     }
 }
 
@@ -149,8 +190,8 @@ fn tries_to_a_habitable_zone_world(class: SpectralClass, tries: u32) -> Vec<Opti
                 used.set(used.get() + 1);
                 habitable_zone_score(system)
             };
-            let (system, _) = generate_where(seed, &config, tries, counted, 0.3);
-            (habitable_zone_score(&system) >= 0.3).then(|| used.get())
+            let found = generate_where(seed, &config, tries, counted, 0.3);
+            (found.score >= 0.3).then(|| used.get())
         })
         .collect()
 }

@@ -128,3 +128,78 @@ fn living_structures_need_a_high_tech_settled_mainworld() {
         }
     }
 }
+
+const KINDS: [MegaKind; 7] = [
+    MegaKind::DysonSwarm,
+    MegaKind::DysonSphere,
+    MegaKind::MatrioshkaBrain,
+    MegaKind::Ringworld,
+    MegaKind::BishopRing,
+    MegaKind::OrbitalRing,
+    MegaKind::ShkadovThruster,
+];
+
+fn forced(kind: Option<MegaKind>, condition: Option<Condition>) -> Config {
+    let mut config = always();
+    config.megastructures.kind = kind;
+    config.megastructures.condition = condition;
+    config
+}
+
+#[test]
+fn a_forced_kind_is_the_systems_first_structure_wherever_one_stands() {
+    for kind in KINDS {
+        let config = forced(Some(kind), None);
+        let mut found = 0;
+        for seed in 0..100 {
+            let system = generate(seed, &config);
+            if let Some(first) = system.megastructures.first() {
+                assert_eq!(first.kind, kind, "seed {seed}");
+                found += 1;
+            }
+        }
+        assert!(found > 0, "no {kind:?} in 100 seeds");
+    }
+}
+
+#[test]
+fn a_forced_condition_is_the_first_structures_unless_nobody_could_run_it() {
+    for condition in [
+        Condition::Derelict,
+        Condition::Ruined,
+        Condition::Unfinished,
+    ] {
+        let config = forced(None, Some(condition));
+        for seed in 0..100 {
+            let system = generate(seed, &config);
+            assert_eq!(system.megastructures[0].condition, condition, "seed {seed}");
+        }
+    }
+    let config = forced(None, Some(Condition::Active));
+    for seed in SEEDS {
+        let system = generate(seed, &config);
+        let home = system.mainworld.is_some_and(|m| {
+            let w = &system.body(m).world;
+            w.is_settled() && w.tech >= 12
+        });
+        let expected = if home {
+            Condition::Active
+        } else {
+            Condition::Derelict
+        };
+        assert_eq!(system.megastructures[0].condition, expected, "seed {seed}");
+    }
+}
+
+#[test]
+fn forcing_what_would_have_been_drawn_changes_nothing() {
+    let config = always();
+    for seed in 0..100 {
+        let system = generate(seed, &config);
+        let Some(first) = system.megastructures.first() else {
+            continue;
+        };
+        let pinned = forced(Some(first.kind), Some(first.condition));
+        assert_eq!(generate(seed, &pinned), system, "seed {seed}");
+    }
+}

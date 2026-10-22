@@ -17,7 +17,7 @@
 //!
 //! [`generate_star`] gives just a seed's star, without the costly layers, for a map of many
 //! systems. [`generate_where`] rerolls a seed until a system scores well enough, for a game
-//! that needs a particular kind of system somewhere.
+//! that needs a particular kind of system somewhere, and says which try won.
 
 pub mod accrete;
 pub mod megastructure;
@@ -72,8 +72,11 @@ pub fn generate_with(rng: &mut dyn Rng, config: &Config) -> StarSystem {
 
     let mass = star::pick_mass(&config.star, &mut streams.star);
     let accreted = accrete::planetary_system(mass, &config.disk, &mut streams.accrete);
-    let star = Star::from_primary(&accreted.primary_star);
+    let mut star = Star::from_primary(&accreted.primary_star);
     let bodies = model::bodies(&accreted, &star, config.resonance_belts);
+    let mut planned =
+        megastructure::plan(&star, &config.megastructures, &mut streams.megastructure);
+    megastructure::dim(&mut star, &planned);
 
     let mut system = StarSystem {
         seed: 0,
@@ -82,14 +85,11 @@ pub fn generate_with(rng: &mut dyn Rng, config: &Config) -> StarSystem {
         mainworld: None,
         megastructures: Vec::new(),
     };
-    megastructure::place(
-        &mut system,
-        &config.megastructures,
-        &mut streams.megastructure,
-    );
+    megastructure::place(&mut system, &mut planned);
     world::settle(&mut system, &config.settlement, &mut streams.world);
     megastructure::commission(
         &mut system,
+        planned,
         &config.megastructures,
         &mut streams.megastructure,
     );
@@ -98,8 +98,9 @@ pub fn generate_with(rng: &mut dyn Rng, config: &Config) -> StarSystem {
 
 /// The star [`generate`] would give for `seed`, without accretion, worlds or megastructures.
 ///
-/// Every field matches `generate(seed, config).star` except `apparent_luminosity`, which only
-/// megastructures dim: here it always equals `luminosity`.
+/// It equals `generate(seed, config).star`, `apparent_luminosity` included: a megastructure's
+/// dimming is drawn from the star alone, so a map can show dimmed stars without generating
+/// their systems.
 pub fn generate_star(seed: u64, config: &Config) -> Star {
     generate_star_with(&mut SplitMix64::new(seed), config)
 }
@@ -109,12 +110,26 @@ pub fn generate_star(seed: u64, config: &Config) -> Star {
 pub fn generate_star_with(rng: &mut dyn Rng, config: &Config) -> Star {
     let mut streams = LayerStreams::split(rng);
     let mass = star::pick_mass(&config.star, &mut streams.star);
-    Star::from_primary(&accrete::PrimaryStar::new(mass))
+    let mut star = Star::from_primary(&accrete::PrimaryStar::new(mass));
+    let planned = megastructure::plan(&star, &config.megastructures, &mut streams.megastructure);
+    megastructure::dim(&mut star, &planned);
+    star
+}
+
+/// What [`generate_where`] found.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Found {
+    pub system: StarSystem,
+    /// The seed that made it: `generate(sub_seed, config)` gives the same system again.
+    pub sub_seed: u64,
+    /// Which try won, from 0 (`seed` itself).
+    pub attempt: u32,
+    /// Its score: at least `good_enough` unless no try reached it.
+    pub score: f64,
 }
 
 /// Generates up to `tries` systems from sub-seeds of `seed` and returns the first whose
-/// `score` reaches `good_enough`, or else the best-scoring one (the earliest on a tie), with
-/// the sub-seed that made it. `generate(sub_seed, config)` gives the same system again.
+/// `score` reaches `good_enough`, or else the best-scoring one (the earliest on a tie).
 ///
 /// Try 0 is `seed` itself; later sub-seeds hash `seed` with the try index. At least one try is
 /// always made.
@@ -124,21 +139,26 @@ pub fn generate_where(
     tries: u32,
     score: impl Fn(&StarSystem) -> f64,
     good_enough: f64,
-) -> (StarSystem, u64) {
-    let mut best: Option<(StarSystem, u64, f64)> = None;
+) -> Found {
+    let mut best: Option<Found> = None;
     for attempt in 0..tries.max(1) {
         let sub_seed = sub_seed(seed, attempt);
         let system = generate(sub_seed, config);
         let s = score(&system);
+        let found = Found {
+            system,
+            sub_seed,
+            attempt,
+            score: s,
+        };
         if s >= good_enough {
-            return (system, sub_seed);
+            return found;
         }
-        if best.as_ref().is_none_or(|(_, _, b)| s > *b) {
-            best = Some((system, sub_seed, s));
+        if best.as_ref().is_none_or(|b| s > b.score) {
+            best = Some(found);
         }
     }
-    let (system, sub_seed, _) = best.expect("at least one try");
-    (system, sub_seed)
+    best.expect("at least one try")
 }
 
 fn sub_seed(seed: u64, attempt: u32) -> u64 {

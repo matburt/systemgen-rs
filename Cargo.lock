@@ -88,14 +88,14 @@ dependencies = [
 
 [[package]]
 name = "systemgen"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "systemgen-cli"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "serde",
  "serde_json",
