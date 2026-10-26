@@ -21,7 +21,7 @@ fn main() {
     let mut regular_sizes = [0usize; 5];
     // Inner regular moons by ice cover: under 0.1, 0.1–0.5, 0.5 and up.
     let (mut inner_ice, mut inner_outer_zone_ice) = ([0usize; 3], [0usize; 3]);
-    let (mut inner_ice_worlds, mut volcanic) = (0, 0);
+    let (mut inner_ice_worlds, mut volcanic, mut volcanic_giants) = (0, 0, 0);
     // Outer regular moons past the frost line: how many, how many Icy, ice cover 0.5 and up.
     let (mut outer_far, mut outer_far_icy, mut outer_far_iced) = (0, 0, 0);
 
@@ -48,6 +48,7 @@ fn main() {
                     inner_giants += 1;
                 }
                 let family = b.moons.iter().filter(|m| m.regular_moon).count();
+                volcanic_giants += usize::from(b.moons.iter().any(|m| m.volcanic));
                 regular_per_giant[family.min(5)] += 1;
                 regular += family;
                 captured += b.moons.len() - family;
@@ -142,7 +143,14 @@ fn main() {
         100.0 * regular_large as f64 / regular.max(1) as f64
     );
     println!(
-        "inner regular moons by ice cover <0.1 / 0.1-0.5 / 0.5+: {inner_ice:?}; past the frost line {inner_outer_zone_ice:?}, {inner_ice_worlds} of them iced over at <= 250 K; {volcanic} regular moons volcanic"
+        "inner regular moons by ice cover <0.1 / 0.1-0.5 / 0.5+: {inner_ice:?}; past the frost line {inner_outer_zone_ice:?}, {inner_ice_worlds} of them iced over at <= 250 K"
+    );
+    println!(
+        "volcanic moons: {volcanic}, {:.3}/giant, {:.2}/system, {:.1}% of inner regular moons; giants with one {:.1}%",
+        per_giant(volcanic),
+        per(volcanic),
+        100.0 * volcanic as f64 / inner_ice.iter().sum::<usize>().max(1) as f64,
+        100.0 * per_giant(volcanic_giants)
     );
     println!(
         "outer regular moons past the frost line: {outer_far}, {outer_far_icy} Icy, {outer_far_iced} with ice cover 0.5+"
