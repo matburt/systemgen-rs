@@ -14,6 +14,11 @@
 //! * A, B and O stars have a finite habitable zone.
 //! * [`Planetesimal::regular_moon`] builds the moons [`crate::moons`] adds to giants after
 //!   the environment pass; they carry `is_regular_moon`. Accrete itself only captures moons.
+//! * A body marked `is_dry` gets no hydrosphere, and so no ice or water clouds, from the
+//!   surface-temperature iteration. [`crate::moons`] marks its inner regular moons.
+//! * A body's `tidal_heating_w_m2` adds to its surface energy balance after the temperature is
+//!   found: `T⁴` rises by the flux over σ. Zero, and so no change, unless [`crate::moons`] sets
+//!   it; `is_volcanic` is carried for [`crate::moons`] too.
 
 #![allow(dead_code, clippy::all)]
 

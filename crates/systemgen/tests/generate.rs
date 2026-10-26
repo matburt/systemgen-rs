@@ -1,6 +1,6 @@
 use systemgen::{
-    generate, generate_with, Body, BodyKind, Config, Settlement, SplitMix64, StarChoice,
-    DWARF_MAX_RADIUS_KM,
+    generate, generate_with, moons::ROCKY_WITHIN_RADII, Body, BodyKind, Config, Settlement,
+    SplitMix64, StarChoice, DWARF_MAX_RADIUS_KM,
 };
 
 const SEEDS: std::ops::Range<u64> = 0..200;
@@ -170,4 +170,39 @@ fn dwarfs_appear_and_none_is_as_large_as_the_dwarf_bound() {
         }
     }
     assert!(dwarfs > 0, "no dwarfs over the seeds");
+}
+
+#[test]
+fn only_inner_regular_moons_are_volcanic_and_none_is_iced_over() {
+    let config = Config::default();
+    let (mut inner, mut volcanic) = (0, 0);
+    for seed in SEEDS {
+        let system = generate(seed, &config);
+        for planet in &system.bodies {
+            assert!(!planet.volcanic, "seed {seed}: a volcanic planet");
+            for m in &planet.moons {
+                let is_inner = m.orbit.distance <= ROCKY_WITHIN_RADII * planet.radius_km;
+                if !(m.regular_moon && is_inner) {
+                    assert!(
+                        !m.volcanic,
+                        "seed {seed}: a volcanic outer or captured moon"
+                    );
+                    continue;
+                }
+                inner += 1;
+                volcanic += usize::from(m.volcanic);
+                assert_eq!(m.kind, BodyKind::Rocky, "seed {seed}");
+                let surface = m.surface.expect("a rocky moon has a surface");
+                assert!(
+                    surface.ice_cover < 0.5,
+                    "seed {seed}: {}",
+                    surface.ice_cover
+                );
+            }
+        }
+    }
+    assert!(
+        inner > 100 && volcanic > 0,
+        "{inner} inner moons, {volcanic} volcanic"
+    );
 }
