@@ -9,12 +9,26 @@
 //! truncated. A cramped giant, close to its star, gets fewer moons or none. A moon whose
 //! periapsis falls within twice the Roche limit becomes a ring, as a captured one does.
 //!
-//! Moons inside [`ROCKY_WITHIN_RADII`] planet radii are rocky; farther out they are icy when
-//! the planet is past the frost line and rocky inside it. A rocky innermost moon with a
-//! neighbour to keep its orbit eccentric is tidally heated and may be volcanic (Io), which
-//! shows as `tectonic`. Environment is derived as for captured moons: temperature from the
-//! star's distance, gas retention from mass and radius. Captured moons stay, as the irregular
-//! moons.
+//! Moons inside [`ROCKY_WITHIN_RADII`] planet radii are *inner*: they formed inside the
+//! giant's own snow line, where its young glow kept the disk too warm for ice (Io), so they
+//! are rocky and dry: the environment pass gives them no water, and so no ice, wherever their
+//! giant orbits. Farther out moons are icy when the planet is past the frost line and rocky
+//! inside it, and keep the environment pass's water.
+//!
+//! An inner moon with an outer neighbour is held in an eccentric orbit by resonance, as Io is
+//! by Europa, and is tidally heated. Its heat flow scales from Io's (2.5 W/m² at 5.9 Jupiter
+//! radii, 421,700 km) as `M_planet^2.5 · R_moon^3 · a^-7.5`, the tidal dissipation per unit
+//! surface at Io's eccentricity and rigidity: it grows with the planet's mass and the moon's
+//! size and falls steeply with distance in planet radii (half as far, 180 times the heat). It
+//! is capped at [`MAX_TIDAL_HEATING_W_M2`], past which a molten interior stops dissipating
+//! more, and adds to the surface energy balance, so `T⁴` rises by `flux / σ`: an Io at 5 AU
+//! warms by about 6 K, a capped moon there by about 40 K. A moon heated by at least
+//! [`VOLCANIC_MIN_W_M2`] is `Body::volcanic`; `tectonic` stays Accrete's broad flag. Outer
+//! moons and moons without a neighbour are not heated. (Enceladus, at Saturn, comes out at
+//! about 0.02 W/m², near its measured flow, and is not volcanic.)
+//!
+//! Environment is otherwise derived as for captured moons: temperature from the star's
+//! distance, gas retention from mass and radius. Captured moons stay, as the irregular moons.
 
 use crate::accrete::consts::KM_PER_AU;
 use crate::accrete::{roche_limit_au, Planetesimal, Ring, System};
@@ -40,9 +54,18 @@ const MAX_ECCENTRICITY: f64 = 0.01;
 /// A moon's share of the family's mass is proportional to a uniform draw from this range,
 /// squared.
 const SHARE_RANGE: (f64, f64) = (0.15, 1.0);
-/// Moons this close to their planet, in planet radii, form rocky (Io 5.9, Europa 9.4).
+/// Moons this close to their planet, in planet radii, form rocky and dry (Io 5.9, Europa 9.4).
 pub const ROCKY_WITHIN_RADII: f64 = 8.0;
-const VOLCANIC_CHANCE: f64 = 0.5;
+/// Io's tidal heat flow, W/m² (Veeder et al. 2012: about 2–3).
+const IO_HEATING_W_M2: f64 = 2.5;
+const IO_DISTANCE_KM: f64 = 421_700.0;
+const IO_RADIUS_KM: f64 = 1821.6;
+const JUPITER_SOLAR_MASSES: f64 = 9.546e-4;
+/// Tidal heating stops growing here, W/m²: ten Ios.
+pub const MAX_TIDAL_HEATING_W_M2: f64 = 25.0;
+/// Tidal heat flow at which a moon reads as volcanic, W/m²: the low end of Io's 2–3, over
+/// twenty times Earth's internal heat flow (0.09).
+pub const VOLCANIC_MIN_W_M2: f64 = 2.0;
 const ROCKY_ZONE: i32 = 1;
 const ICY_ZONE: i32 = 3;
 
@@ -94,10 +117,17 @@ fn form_family(planet: &mut Planetesimal, env: &Env, rng: &mut dyn Rng) {
         let jitter = 1.0 + rng.range_f64(-JITTER, JITTER);
         let a = inner * (outer / inner).powf(place) * jitter;
         let e = rng.range_f64(0.0, MAX_ECCENTRICITY);
-        let icy = past_frost_line && a > ROCKY_WITHIN_RADII * radius_au;
+        let is_inner = a <= ROCKY_WITHIN_RADII * radius_au;
+        let icy = past_frost_line && !is_inner;
         let zone = if icy { ICY_ZONE } else { ROCKY_ZONE };
         let mut moon = Planetesimal::regular_moon(a, e, total * share / share_sum, zone);
         moon.distance_to_primary_star = planet.a;
+        moon.is_dry = is_inner;
+        let has_outer_neighbour = i + 1 < shares.len();
+        if is_inner && has_outer_neighbour {
+            moon.tidal_heating_w_m2 = tidal_heating_w_m2(planet.mass, moon.radius, a);
+            moon.is_volcanic = moon.tidal_heating_w_m2 >= VOLCANIC_MIN_W_M2;
+        }
 
         let roche = roche_limit_au(&planet.mass, &moon.mass, &moon.radius);
         if a * (1.0 - e) <= 2.0 * roche {
@@ -111,11 +141,19 @@ fn form_family(planet: &mut Planetesimal, env: &Env, rng: &mut dyn Rng) {
             &env.ecosphere,
             rng,
         );
-        if i == 0 && !icy && count > 1 && rng.chance(VOLCANIC_CHANCE) {
-            moon.tectonic_activity = true;
-        }
         planet.moons.push(moon);
     }
+}
+
+/// The tidal heat flow, W/m², of a moon of `radius_km` at `a_au` from a planet of
+/// `planet_mass` solar masses, held at Io's eccentricity: Io's, scaled as
+/// `M^2.5 · R^3 · a^-7.5` and capped at [`MAX_TIDAL_HEATING_W_M2`].
+fn tidal_heating_w_m2(planet_mass: f64, radius_km: f64, a_au: f64) -> f64 {
+    let flux = IO_HEATING_W_M2
+        * (planet_mass / JUPITER_SOLAR_MASSES).powf(2.5)
+        * (radius_km / IO_RADIUS_KM).powi(3)
+        * (IO_DISTANCE_KM / (a_au * KM_PER_AU)).powf(7.5);
+    flux.min(MAX_TIDAL_HEATING_W_M2)
 }
 
 /// How many moons fit between `inner` and `outer` at [`MIN_SPACING`], jitter allowed for.
@@ -133,8 +171,6 @@ mod tests {
     use crate::accrete::{planetary_system, Disk};
     use crate::rng::SplitMix64;
     use crate::star::Star;
-
-    const JUPITER_SOLAR_MASSES: f64 = 9.55e-4;
 
     fn jupiter_system(seed: u64) -> System {
         let mut system = System::set_initial_conditions(1.0, 0.0015, 50.0, 0.2, 1.2e-5);
@@ -195,6 +231,104 @@ mod tests {
             }
         }
         assert!(checked > 100, "{checked}");
+    }
+
+    fn is_inner(moon: &Planetesimal, planet: &Planetesimal) -> bool {
+        moon.a <= ROCKY_WITHIN_RADII * planet.radius / KM_PER_AU
+    }
+
+    #[test]
+    fn inner_moons_of_a_jupiter_at_5_au_are_dry_rock_not_ice() {
+        let mut inner = 0;
+        for seed in 0..200 {
+            let system = jupiter_system(seed);
+            let jupiter = &system.planets[0];
+            for m in regular(jupiter).filter(|m| is_inner(m, jupiter)) {
+                assert_eq!(m.orbit_zone, ROCKY_ZONE, "seed {seed}");
+                assert!(m.ice_cover < 0.5, "seed {seed}: {}", m.ice_cover);
+                assert_eq!(m.hydrosphere, 0.0, "seed {seed}");
+                inner += 1;
+            }
+        }
+        assert!(inner > 100, "{inner}");
+    }
+
+    #[test]
+    fn outer_moons_of_a_jupiter_past_the_frost_line_stay_icy() {
+        let (mut outer, mut iced) = (0, 0);
+        for seed in 0..200 {
+            let system = jupiter_system(seed);
+            let jupiter = &system.planets[0];
+            for m in regular(jupiter).filter(|m| !is_inner(m, jupiter)) {
+                assert_eq!(m.orbit_zone, ICY_ZONE, "seed {seed}");
+                assert!(!m.is_dry && !m.is_volcanic, "seed {seed}");
+                assert_eq!(m.tidal_heating_w_m2, 0.0, "seed {seed}");
+                outer += 1;
+                iced += usize::from(m.ice_cover >= 0.5);
+            }
+        }
+        assert!(outer > 100, "{outer}");
+        assert!(iced > 0, "no outer moon kept its ice");
+    }
+
+    #[test]
+    fn io_scales_to_ios_heat_and_closer_or_heavier_means_hotter() {
+        let io_au = IO_DISTANCE_KM / KM_PER_AU;
+        let io = tidal_heating_w_m2(JUPITER_SOLAR_MASSES, IO_RADIUS_KM, io_au);
+        assert!((io - IO_HEATING_W_M2).abs() < 1e-9, "{io}");
+        assert!(io >= VOLCANIC_MIN_W_M2);
+        assert!(tidal_heating_w_m2(JUPITER_SOLAR_MASSES, IO_RADIUS_KM, 1.5 * io_au) < io);
+        assert!(tidal_heating_w_m2(2.0 * JUPITER_SOLAR_MASSES, IO_RADIUS_KM, io_au) > io);
+        let close = tidal_heating_w_m2(JUPITER_SOLAR_MASSES, IO_RADIUS_KM, 0.5 * io_au);
+        assert_eq!(close, MAX_TIDAL_HEATING_W_M2);
+    }
+
+    #[test]
+    fn only_inner_moons_with_an_outer_neighbour_are_heated_and_heat_warms_them() {
+        let mut heated = 0;
+        for seed in 0..200 {
+            let system = jupiter_system(seed);
+            let jupiter = &system.planets[0];
+            let moons: Vec<_> = regular(jupiter).collect();
+            for (i, m) in moons.iter().enumerate() {
+                let outermost = i + 1 == moons.len();
+                if m.tidal_heating_w_m2 > 0.0 {
+                    assert!(is_inner(m, jupiter) && !outermost, "seed {seed}");
+                    if m.is_volcanic {
+                        let hot = rederived(m, m.tidal_heating_w_m2, &system, jupiter, seed);
+                        let cold = rederived(m, 0.0, &system, jupiter, seed);
+                        assert!(hot > cold, "seed {seed}: {hot} K, {cold} K unheated");
+                    }
+                    heated += 1;
+                }
+                assert_eq!(
+                    m.is_volcanic,
+                    m.tidal_heating_w_m2 >= VOLCANIC_MIN_W_M2,
+                    "seed {seed}"
+                );
+            }
+        }
+        assert!(heated > 50, "{heated}");
+    }
+
+    fn rederived(
+        moon: &Planetesimal,
+        heating: f64,
+        system: &System,
+        planet: &Planetesimal,
+        seed: u64,
+    ) -> f64 {
+        let mut moon = moon.clone();
+        moon.tidal_heating_w_m2 = heating;
+        let star = &system.primary_star;
+        moon.derive_planetary_environment(
+            &star.stellar_luminosity,
+            &planet.mass,
+            &star.main_seq_age,
+            &star.ecosphere,
+            &mut SplitMix64::new(seed),
+        );
+        moon.surface_temp_kelvin
     }
 
     #[test]

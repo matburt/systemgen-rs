@@ -1,6 +1,7 @@
 //! The public description of a generated system, and how the accrete layer's planetesimals
 //! become it: units a game can use, zones relative to the star, belts, and moons in km. A
-//! regular moon is `Rocky` or `Icy` by the composition it formed with, not by zone.
+//! regular moon is `Rocky` or `Icy` by the composition it formed with, not by zone, and may be
+//! `volcanic`.
 //!
 //! A top-level body that has not cleared its orbit is a belt if it's lighter than
 //! [`BELT_MAX_EARTH_MASSES`], a dwarf if it's smaller than [`DWARF_MAX_RADIUS_KM`], and
@@ -178,7 +179,12 @@ pub struct Body {
     pub axial_tilt_deg: f64,
     pub tidally_locked: bool,
     pub magnetosphere: bool,
+    /// Accrete's broad flag: tidally locked, of 0.5–1.5 Earth masses, or struck in a collision.
+    /// True of most solid bodies; see `volcanic` for active volcanism.
     pub tectonic: bool,
+    /// Tidal heating drives Io-like volcanism ([`crate::moons`]). Only inner regular moons
+    /// are heated, so it is false for planets and other moons.
+    pub volcanic: bool,
     pub rings: Vec<RingBand>,
     pub moons: Vec<Body>,
     /// A moon formed in its giant's disk ([`crate::moons`]); false for captured moons and
@@ -259,6 +265,7 @@ fn body(p: &Planetesimal, star: &Star, parent: Option<&Planetesimal>) -> Body {
         tidally_locked: p.is_tidally_locked,
         magnetosphere: p.magnetosphere,
         tectonic: p.tectonic_activity,
+        volcanic: p.is_volcanic,
         rings: p
             .rings
             .iter()
@@ -332,6 +339,7 @@ fn insert_resonance_belt(bodies: &mut Vec<Body>, star: &Star) {
         tidally_locked: false,
         magnetosphere: false,
         tectonic: false,
+        volcanic: false,
         rings: Vec::new(),
         moons: Vec::new(),
         regular_moon: false,

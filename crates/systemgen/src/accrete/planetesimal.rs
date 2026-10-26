@@ -68,6 +68,12 @@ pub struct Planetesimal {
     pub has_collision: bool,
     // formed in its planet's circumplanetary disk (crate::moons), not captured
     pub is_regular_moon: bool,
+    // formed without water, so the environment pass gives it no hydrosphere or ice
+    pub is_dry: bool,
+    // internal heat flow from tides, W/m², added to the surface energy balance
+    pub tidal_heating_w_m2: f64,
+    // set by crate::moons when tidal heating drives Io-like volcanism
+    pub is_volcanic: bool,
 }
 
 impl Planetesimal {
@@ -143,6 +149,9 @@ impl Planetesimal {
             magnetosphere: false,
             has_collision: false,
             is_regular_moon: false,
+            is_dry: false,
+            tidal_heating_w_m2: 0.0,
+            is_volcanic: false,
         }
     }
 
@@ -225,6 +234,12 @@ impl Planetesimal {
                 self.boiling_point_kelvin = boiling_point_kelvin(&self.surface_pressure_bar);
                 iterate_surface_temp(self, &r_ecosphere, rng);
             }
+        }
+
+        if !self.is_gas_giant && self.tidal_heating_w_m2 > 0.0 {
+            self.surface_temp_kelvin = float_to_precision(
+                (self.surface_temp_kelvin.powi(4) + self.tidal_heating_w_m2 / SIGMA).powf(0.25),
+            );
         }
 
         get_day_night_temp_kelvin(self);
@@ -351,6 +366,9 @@ impl Planetesimal {
             magnetosphere: false,
             has_collision: false,
             is_regular_moon: false,
+            is_dry: false,
+            tidal_heating_w_m2: 0.0,
+            is_volcanic: false,
         };
 
         for _i in 0..post_accretion_intensity {

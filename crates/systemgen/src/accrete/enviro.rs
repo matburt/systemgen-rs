@@ -439,7 +439,11 @@ pub fn iterate_surface_temp(planet: &mut Planetesimal, ecosphere_radius: &f64, r
 
     while (surface_temp_kelvin - previous_temp).abs() > 1.0 {
         previous_temp = surface_temp_kelvin;
-        water = hydrosphere_fraction(&planet.volatile_gas_inventory, &planet.radius);
+        water = if planet.is_dry {
+            0.0
+        } else {
+            hydrosphere_fraction(&planet.volatile_gas_inventory, &planet.radius)
+        };
         clouds = cloud_fraction(
             surface_temp_kelvin,
             planet.molecule_weight,
