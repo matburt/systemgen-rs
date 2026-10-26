@@ -66,6 +66,8 @@ pub struct Planetesimal {
     pub magnetosphere: bool,
     // if planet had collision with other objects
     pub has_collision: bool,
+    // formed in its planet's circumplanetary disk (crate::moons), not captured
+    pub is_regular_moon: bool,
 }
 
 impl Planetesimal {
@@ -76,6 +78,22 @@ impl Planetesimal {
     ) -> Self {
         let a = semi_major_axis(*planetesimal_inner_bound, *planetesimal_outer_bound, rng);
         let e = random_eccentricity(rng);
+        Self::at(a, e)
+    }
+
+    /// A regular moon of `mass` solar masses at `a` AU from its planet, its radius from its
+    /// composition: rocky in zone 1, icy in zone 3.
+    pub fn regular_moon(a: f64, e: f64, mass: f64, orbit_zone: i32) -> Self {
+        let mut moon = Self::at(a, e);
+        moon.mass = mass;
+        moon.orbit_zone = orbit_zone;
+        moon.radius = kothari_radius(&mass, &false, &orbit_zone);
+        moon.is_moon = true;
+        moon.is_regular_moon = true;
+        moon
+    }
+
+    fn at(a: f64, e: f64) -> Self {
         let b = semi_minor_axis(a, e);
 
         Planetesimal {
@@ -124,6 +142,7 @@ impl Planetesimal {
             tectonic_activity: false,
             magnetosphere: false,
             has_collision: false,
+            is_regular_moon: false,
         }
     }
 
@@ -331,6 +350,7 @@ impl Planetesimal {
             tectonic_activity: false,
             magnetosphere: false,
             has_collision: false,
+            is_regular_moon: false,
         };
 
         for _i in 0..post_accretion_intensity {

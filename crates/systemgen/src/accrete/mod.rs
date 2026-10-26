@@ -12,6 +12,8 @@
 //!   planet.
 //! * Day length is in hours throughout, and the tidal-lock check compares a day with a year.
 //! * A, B and O stars have a finite habitable zone.
+//! * [`Planetesimal::regular_moon`] builds the moons [`crate::moons`] adds to giants after
+//!   the environment pass; they carry `is_regular_moon`. Accrete itself only captures moons.
 
 #![allow(dead_code, clippy::all)]
 
@@ -28,6 +30,7 @@ pub use planetesimal::Planetesimal;
 pub use primary_star::PrimaryStar;
 pub use ring::Ring;
 pub use system::System;
+pub(crate) use utils::roche_limit_au;
 
 use crate::rng::Rng;
 // The modules reach each other's items through `use super::*`, as upstream's did.

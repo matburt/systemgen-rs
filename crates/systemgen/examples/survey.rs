@@ -15,6 +15,10 @@ fn main() {
     let mut megas = std::collections::BTreeMap::new();
     let mut kinds = std::collections::BTreeMap::new();
     let (mut with_megas, mut dimmed) = (0, 0);
+    let (mut regular, mut captured, mut regular_large) = (0, 0, 0);
+    let mut regular_per_giant = [0usize; 6];
+    // Regular moon diameters, km: under 400, 400–800, 800–1,600, 1,600–3,200, 3,200 and up.
+    let mut regular_sizes = [0usize; 5];
 
     let start = std::time::Instant::now();
     for seed in 0..n {
@@ -37,6 +41,19 @@ fn main() {
                 giants += 1;
                 if b.orbit.distance < system.star.frost_line_au {
                     inner_giants += 1;
+                }
+                let family = b.moons.iter().filter(|m| m.regular_moon).count();
+                regular_per_giant[family.min(5)] += 1;
+                regular += family;
+                captured += b.moons.len() - family;
+                for m in b.moons.iter().filter(|m| m.regular_moon) {
+                    let diameter = 2.0 * m.radius_km;
+                    regular_large += usize::from(diameter > 800.0);
+                    let bucket = [400.0, 800.0, 1600.0, 3200.0]
+                        .iter()
+                        .take_while(|&&edge| diameter >= edge)
+                        .count();
+                    regular_sizes[bucket] += 1;
                 }
             }
             if b.kind == BodyKind::Belt {
@@ -93,4 +110,14 @@ fn main() {
         100.0 * per(dimmed)
     );
     println!("megastructures: {megas:?}");
+    let per_giant = |x: usize| x as f64 / giants.max(1) as f64;
+    println!(
+        "per giant: {:.2} regular moons, {:.2} captured; giants with 0..=5 regular moons {regular_per_giant:?}",
+        per_giant(regular),
+        per_giant(captured)
+    );
+    println!(
+        "regular moon diameters <400 / 400-800 / 800-1600 / 1600-3200 / 3200+ km: {regular_sizes:?}, {:.1}% above 800 km",
+        100.0 * regular_large as f64 / regular.max(1) as f64
+    );
 }

@@ -1,5 +1,6 @@
 //! The public description of a generated system, and how the accrete layer's planetesimals
-//! become it: units a game can use, zones relative to the star, belts, and moons in km.
+//! become it: units a game can use, zones relative to the star, belts, and moons in km. A
+//! regular moon is `Rocky` or `Icy` by the composition it formed with, not by zone.
 //!
 //! A top-level body that has not cleared its orbit is a belt if it's lighter than
 //! [`BELT_MAX_EARTH_MASSES`], a dwarf if it's smaller than [`DWARF_MAX_RADIUS_KM`], and
@@ -180,6 +181,9 @@ pub struct Body {
     pub tectonic: bool,
     pub rings: Vec<RingBand>,
     pub moons: Vec<Body>,
+    /// A moon formed in its giant's disk ([`crate::moons`]); false for captured moons and
+    /// planets.
+    pub regular_moon: bool,
     pub world: WorldProfile,
 }
 
@@ -210,6 +214,12 @@ fn body(p: &Planetesimal, star: &Star, parent: Option<&Planetesimal>) -> Body {
         BodyKind::Belt
     } else if parent.is_none() && p.is_dwarf_planet && p.radius < DWARF_MAX_RADIUS_KM {
         BodyKind::Dwarf
+    } else if p.is_regular_moon {
+        if p.orbit_zone == 1 {
+            BodyKind::Rocky
+        } else {
+            BodyKind::Icy
+        }
     } else if zone == Zone::Outer {
         BodyKind::Icy
     } else {
@@ -269,6 +279,7 @@ fn body(p: &Planetesimal, star: &Star, parent: Option<&Planetesimal>) -> Body {
             moons.sort_by(|a, b| a.orbit.distance.total_cmp(&b.orbit.distance));
             moons
         },
+        regular_moon: p.is_regular_moon,
         world: WorldProfile::default(),
     }
 }
@@ -323,6 +334,7 @@ fn insert_resonance_belt(bodies: &mut Vec<Body>, star: &Star) {
         tectonic: false,
         rings: Vec::new(),
         moons: Vec::new(),
+        regular_moon: false,
         world: WorldProfile::default(),
     };
     bodies.insert(giant, belt);
