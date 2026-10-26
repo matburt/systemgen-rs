@@ -1,6 +1,6 @@
 # Agent notes
 
-`systemgen` makes plausible star systems for the space game (`../space`, Linear SPA-299). Each module's `//!` doc says what it owns: `star` → `accrete` → `model` → `megastructure::place` → `world` → `megastructure::commission`; `lib.rs` wires them together.
+`systemgen` makes plausible star systems for the space game (`../space`, Linear SPA-299). Each module's `//!` doc says what it owns: `star` → `accrete` → `moons` → `model` → `megastructure::place` → `world` → `megastructure::commission`; `lib.rs` wires them together.
 
 ## Rules
 

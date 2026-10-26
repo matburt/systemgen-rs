@@ -3,8 +3,9 @@
 //! 1. [`star`]: the primary star, picked first (class weights, then a mass), with its
 //!    habitable zone and frost line.
 //! 2. [`accrete`]: Dole/Sagan/Isaacson accretion for the planets, gas giants, moons and rings,
-//!    then the Starform/StarGen environment pass for each body's surface. [`model`] turns the
-//!    result into [`Body`]s and adds belts.
+//!    then the Starform/StarGen environment pass for each body's surface. [`moons`] gives
+//!    each giant its family of regular moons. [`model`] turns the result into [`Body`]s and
+//!    adds belts.
 //! 3. [`world`]: a Traveller-shaped [`WorldProfile`] per body (starport, size, atmosphere,
 //!    hydrographics, population, government, law, tech, trade tags, ruins), with sparse
 //!    settlement.
@@ -22,6 +23,7 @@
 pub mod accrete;
 pub mod megastructure;
 pub mod model;
+pub mod moons;
 pub mod rng;
 pub mod star;
 pub mod world;
@@ -71,8 +73,9 @@ pub fn generate_with(rng: &mut dyn Rng, config: &Config) -> StarSystem {
     let mut streams = LayerStreams::split(rng);
 
     let mass = star::pick_mass(&config.star, &mut streams.star);
-    let accreted = accrete::planetary_system(mass, &config.disk, &mut streams.accrete);
+    let mut accreted = accrete::planetary_system(mass, &config.disk, &mut streams.accrete);
     let mut star = Star::from_primary(&accreted.primary_star);
+    moons::form(&mut accreted, star.frost_line_au, &mut streams.accrete);
     let bodies = model::bodies(&accreted, &star, config.resonance_belts);
     let mut planned =
         megastructure::plan(&star, &config.megastructures, &mut streams.megastructure);
