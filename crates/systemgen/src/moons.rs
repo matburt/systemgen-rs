@@ -15,17 +15,19 @@
 //! giant orbits. Farther out moons are icy when the planet is past the frost line and rocky
 //! inside it, and keep the environment pass's water.
 //!
-//! An inner moon with an outer neighbour is held in an eccentric orbit by resonance, as Io is
-//! by Europa, and is tidally heated. Its heat flow scales from Io's (2.5 W/m² at 5.9 Jupiter
-//! radii, 421,700 km) as `M_planet^2.5 · R_moon^3 · a^-7.5`, the tidal dissipation per unit
-//! surface at Io's eccentricity and rigidity: it grows with the planet's mass and the moon's
-//! size and falls steeply with distance in planet radii (half as far, 180 times the heat). It
-//! is capped at [`MAX_TIDAL_HEATING_W_M2`], past which a molten interior stops dissipating
-//! more, and adds to the surface energy balance, so `T⁴` rises by `flux / σ`: an Io at 5 AU
-//! warms by about 6 K, a capped moon there by about 40 K. A moon heated by at least
-//! [`VOLCANIC_MIN_W_M2`] is `Body::volcanic`; `tectonic` stays Accrete's broad flag. Outer
-//! moons and moons without a neighbour are not heated. (Enceladus, at Saturn, comes out at
-//! about 0.02 W/m², near its measured flow, and is not volcanic.)
+//! An inner moon whose period is near 2:1 or 3:1 with the next moon out (within
+//! [`RESONANCE_TOLERANCE`]) is held in an eccentric orbit by that resonance, as Io is by
+//! Europa, and is tidally heated; out of resonance its eccentricity is damped and it is not.
+//! The heat flow scales from Io's (2.5 W/m² at 5.9 Jupiter radii, 421,700 km) as
+//! `M_planet^2.5 · R_moon^3 · a^-7.5`, the tidal dissipation per unit surface at Io's
+//! eccentricity and rigidity: it grows with the planet's mass and the moon's size and falls
+//! steeply with distance in planet radii (half as far, 180 times the heat). It is capped at
+//! [`MAX_TIDAL_HEATING_W_M2`], past which a molten interior stops dissipating more, and adds
+//! to the surface energy balance, so `T⁴` rises by `flux / σ`: an Io at 5 AU warms by about
+//! 6 K, a capped moon there by about 40 K. A moon heated by at least [`VOLCANIC_MIN_W_M2`] is
+//! `Body::volcanic`; `tectonic` stays Accrete's broad flag. Outer moons are not heated. About
+//! one giant in five has a volcanic moon, as one of Sol's four does. (Enceladus, at Saturn,
+//! comes out at about 0.02 W/m², near its measured flow, and is not volcanic.)
 //!
 //! Environment is otherwise derived as for captured moons: temperature from the star's
 //! distance, gas retention from mass and radius. Captured moons stay, as the irregular moons.
@@ -61,6 +63,14 @@ const IO_HEATING_W_M2: f64 = 2.5;
 const IO_DISTANCE_KM: f64 = 421_700.0;
 const IO_RADIUS_KM: f64 = 1821.6;
 const JUPITER_SOLAR_MASSES: f64 = 9.546e-4;
+/// Period ratios with the next moon out that force an eccentricity: 2:1 (Io–Europa) and 3:1
+/// (Miranda–Umbriel, which heated Miranda). Closer ones such as 3:2 are left out:
+/// [`MIN_SPACING`] keeps neighbours' periods at least 1.57 apart, so they would barely occur.
+const RESONANCES: [f64; 2] = [2.0, 3.0];
+/// How far, as a fraction, a pair's period ratio may sit from a resonance and still be in it:
+/// moons migrating outward in the young disk are captured from about this far off (Io–Europa
+/// sit at 2.007 today). Tuned so about one giant in five has a volcanic moon.
+pub const RESONANCE_TOLERANCE: f64 = 0.1;
 /// Tidal heating stops growing here, W/m²: ten Ios.
 pub const MAX_TIDAL_HEATING_W_M2: f64 = 25.0;
 /// Tidal heat flow at which a moon reads as volcanic, W/m²: the low end of Io's 2–3, over
@@ -108,23 +118,30 @@ fn form_family(planet: &mut Planetesimal, env: &Env, rng: &mut dyn Rng) {
     let share_sum: f64 = shares.iter().sum();
     let past_frost_line = planet.a >= env.frost_line_au;
 
-    for (i, share) in shares.iter().enumerate() {
-        let place = if count == 1 {
-            0.0
-        } else {
-            i as f64 / f64::from(count - 1)
-        };
-        let jitter = 1.0 + rng.range_f64(-JITTER, JITTER);
-        let a = inner * (outer / inner).powf(place) * jitter;
-        let e = rng.range_f64(0.0, MAX_ECCENTRICITY);
+    let orbits: Vec<(f64, f64)> = (0..count)
+        .map(|i| {
+            let place = if count == 1 {
+                0.0
+            } else {
+                f64::from(i) / f64::from(count - 1)
+            };
+            let jitter = 1.0 + rng.range_f64(-JITTER, JITTER);
+            let a = inner * (outer / inner).powf(place) * jitter;
+            (a, rng.range_f64(0.0, MAX_ECCENTRICITY))
+        })
+        .collect();
+
+    for (i, (share, &(a, e))) in shares.iter().zip(&orbits).enumerate() {
         let is_inner = a <= ROCKY_WITHIN_RADII * radius_au;
         let icy = past_frost_line && !is_inner;
         let zone = if icy { ICY_ZONE } else { ROCKY_ZONE };
         let mut moon = Planetesimal::regular_moon(a, e, total * share / share_sum, zone);
         moon.distance_to_primary_star = planet.a;
         moon.is_dry = is_inner;
-        let has_outer_neighbour = i + 1 < shares.len();
-        if is_inner && has_outer_neighbour {
+        let resonant = orbits
+            .get(i + 1)
+            .is_some_and(|&(next, _)| in_resonance(a, next));
+        if is_inner && resonant {
             moon.tidal_heating_w_m2 = tidal_heating_w_m2(planet.mass, moon.radius, a);
             moon.is_volcanic = moon.tidal_heating_w_m2 >= VOLCANIC_MIN_W_M2;
         }
@@ -154,6 +171,15 @@ fn tidal_heating_w_m2(planet_mass: f64, radius_km: f64, a_au: f64) -> f64 {
         * (radius_km / IO_RADIUS_KM).powi(3)
         * (IO_DISTANCE_KM / (a_au * KM_PER_AU)).powf(7.5);
     flux.min(MAX_TIDAL_HEATING_W_M2)
+}
+
+/// Whether a moon at `a` and its outer neighbour at `next` (same planet) have periods within
+/// [`RESONANCE_TOLERANCE`] of one of [`RESONANCES`]. Periods go as `a^1.5`.
+fn in_resonance(a: f64, next: f64) -> bool {
+    let ratio = (next / a).powf(1.5);
+    RESONANCES
+        .iter()
+        .any(|r| (ratio / r - 1.0).abs() <= RESONANCE_TOLERANCE)
 }
 
 /// How many moons fit between `inner` and `outer` at [`MIN_SPACING`], jitter allowed for.
@@ -284,22 +310,44 @@ mod tests {
     }
 
     #[test]
-    fn only_inner_moons_with_an_outer_neighbour_are_heated_and_heat_warms_them() {
-        let mut heated = 0;
-        for seed in 0..200 {
+    fn a_pair_near_2_to_1_or_3_to_1_is_resonant_and_others_are_not() {
+        let at_period_ratio = |ratio: f64| ratio.powf(2.0 / 3.0);
+        assert!(in_resonance(1.0, at_period_ratio(2.007)));
+        assert!(in_resonance(
+            1.0,
+            at_period_ratio(2.0 * (1.0 + 0.9 * RESONANCE_TOLERANCE))
+        ));
+        assert!(in_resonance(1.0, at_period_ratio(3.0)));
+        assert!(!in_resonance(1.0, at_period_ratio(2.5)));
+        assert!(!in_resonance(
+            1.0,
+            at_period_ratio(2.0 * (1.0 + 1.1 * RESONANCE_TOLERANCE))
+        ));
+        assert!(!in_resonance(1.0, at_period_ratio(4.0)));
+    }
+
+    #[test]
+    fn only_inner_moons_resonant_with_the_next_out_are_heated_and_heat_warms_them() {
+        let (mut heated, mut inner_unheated) = (0, 0);
+        for seed in 0..400 {
             let system = jupiter_system(seed);
             let jupiter = &system.planets[0];
             let moons: Vec<_> = regular(jupiter).collect();
             for (i, m) in moons.iter().enumerate() {
-                let outermost = i + 1 == moons.len();
-                if m.tidal_heating_w_m2 > 0.0 {
-                    assert!(is_inner(m, jupiter) && !outermost, "seed {seed}");
+                let resonant = moons
+                    .get(i + 1)
+                    .is_some_and(|next| in_resonance(m.a, next.a));
+                let heated_here = m.tidal_heating_w_m2 > 0.0;
+                assert_eq!(heated_here, is_inner(m, jupiter) && resonant, "seed {seed}");
+                if heated_here {
                     if m.is_volcanic {
                         let hot = rederived(m, m.tidal_heating_w_m2, &system, jupiter, seed);
                         let cold = rederived(m, 0.0, &system, jupiter, seed);
                         assert!(hot > cold, "seed {seed}: {hot} K, {cold} K unheated");
                     }
                     heated += 1;
+                } else if is_inner(m, jupiter) && i + 1 < moons.len() {
+                    inner_unheated += 1;
                 }
                 assert_eq!(
                     m.is_volcanic,
@@ -308,7 +356,10 @@ mod tests {
                 );
             }
         }
-        assert!(heated > 50, "{heated}");
+        assert!(
+            heated > 20 && inner_unheated > 20,
+            "{heated} heated, {inner_unheated} not"
+        );
     }
 
     fn rederived(
